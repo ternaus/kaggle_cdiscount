@@ -40,7 +40,7 @@ def validation(model, criterion, valid_loader):
         outputs = model(inputs)
         loss = criterion(outputs, targets)
         losses.append(loss.data[0])
-        accuracy_scores.append(float(targets.data.cpu().numpy() == outputs.data.cpu().numpy()))
+        accuracy_scores.append(float(np.argmax(targets.data.cpu().numpy()) == outputs.data.cpu().numpy()))
 
     valid_loss = np.mean(losses)  # type: float
     valid_accuracy = np.mean(accuracy_scores)  # type: float
