@@ -73,16 +73,25 @@ if __name__ == '__main__':
     batch_size = args.batch_size
 
     train_transform = transforms.Compose([
-        augmentations.D4(),
+        transforms.RandomSizedCrop(160),
+        # augmentations.D4(),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
 
-    train_loader, valid_loader = data_loader.get_loaders(batch_size, args, train_transform=train_transform)
+    val_transform = transforms.Compose([
+        transforms.CenterCrop(160),
+        # augmentations.D4(),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+
+    train_loader, valid_loader = data_loader.get_loaders(batch_size, args, train_transform=train_transform, val_transform=val_transform)
 
     num_classes = 5270
 
-    model = models.ResNetFinetune(num_classes, net_cls=models.M.resnet50)
+    # model = models.ResNetFinetune(num_classes, net_cls=models.M.resnet50)
+    model = models.DenseNetFinetune(models.densenet121)
     model = utils.cuda(model)
 
     if utils.cuda_is_available:

@@ -56,6 +56,7 @@ class DenseNetFinetune(nn.Module):
         super().__init__()
         self.net = net_cls(pretrained=True)
         self.net.avgpool = AvgPool()
+        self.relu = torch.nn.ReLU(inplace=True)
 
         if two_layer:
             mid_channels = 512
@@ -71,7 +72,17 @@ class DenseNetFinetune(nn.Module):
         return self.net.classifier.parameters()
 
     def forward(self, x):
-        return self.net(x)
+        net = self.net
+        features = net.features(x)
+        out = self.relu(features)
+        out = torch.nn.functional.avg_pool2d(out, (out.size(2), out.size(3)))
+        out = out.view(features.size(0), -1)
+        out = net.classifier(out)
+        return out
+    #
+    #
+    # def forward(self, x):
+    #     return self.net(x)
 
 
 class InceptionV3Finetune(nn.Module):
