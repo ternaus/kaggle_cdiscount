@@ -1,26 +1,21 @@
-from concurrent.futures import ThreadPoolExecutor
 import json
-from datetime import datetime
-
-from itertools import islice
-import functools
-from pathlib import Path
-
 import random
 import shutil
-
-import numpy as np
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from pathlib import Path
 from PIL import Image
-from sklearn.model_selection import KFold
-import statprof
+
+
+import cv2
+import numpy as np
 import torch
+import tqdm
 from torch import nn
 from torch.autograd import Variable
 from torchvision.transforms import ToTensor, Normalize, Compose
-import tqdm
 
-
-DATA_ROOT = Path(__file__).absolute().parent / 'data'
+DATA_ROOT = Path(__file__).absolute() / 'data'
 
 cuda_is_available = torch.cuda.is_available()
 
@@ -41,28 +36,9 @@ img_transform = Compose([
 ])
 
 
-def load_image(path: Path) -> Image.Image:
-    return Image.open(str(path)).convert('RGB')
-
-
-def train_valid_split(args, img_paths):
-    img_paths = np.array(sorted(img_paths))
-    cv_split = KFold(n_splits=args.n_folds, shuffle=True, random_state=42)
-    img_folds = list(cv_split.split(img_paths))
-    train_ids, valid_ids = img_folds[args.fold - 1]
-    return img_paths[train_ids], img_paths[valid_ids]
-
-
-def profile(fn):
-    @functools.wraps(fn)
-    def wrapped(*args, **kwargs):
-        statprof.start()
-        try:
-            return fn(*args, **kwargs)
-        finally:
-            statprof.stop()
-            statprof.display()
-    return wrapped
+def load_image(path: Path) -> np.array:
+    img = cv2.imread(str(path))
+    return Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
 
 
 def write_event(log, step: int, **data):
@@ -116,13 +92,10 @@ def train(args,
     for epoch in range(epoch, n_epochs + 1):
         model.train()
         random.seed()
-        tq = tqdm.tqdm(total=(args.epoch_size or
-                              len(train_loader) * args.batch_size))
+        tq = tqdm.tqdm(total=(len(train_loader) * args.batch_size))
         tq.set_description('Epoch {}, lr {}'.format(epoch, lr))
         losses = []
         tl = train_loader
-        if args.epoch_size:
-            tl = islice(tl, args.epoch_size // args.batch_size)
         try:
             mean_loss = 0
             for i, (inputs, targets) in enumerate(tl):
@@ -154,7 +127,7 @@ def train(args,
                 best_valid_loss = valid_loss
                 shutil.copy(str(model_path), str(best_model_path))
             elif (patience and epoch - lr_reset_epoch > patience and
-                  min(valid_losses[-patience:]) > best_valid_loss):
+                          min(valid_losses[-patience:]) > best_valid_loss):
                 # "patience" epochs without improvement
                 lr /= 5
                 lr_reset_epoch = epoch
@@ -189,4 +162,3 @@ def imap_fixed_output_buffer(fn, it, threads: int):
             futures.append(executor.submit(fn, x))
         for future in futures:
             yield future.result()
-

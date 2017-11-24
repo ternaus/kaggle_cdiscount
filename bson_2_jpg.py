@@ -26,7 +26,7 @@ def process(q, iolock):
                 f.write(pic['picture'])
 
 
-data_path = Path('../data')
+data_path = Path('data')
 base_path = data_path / 'train'
 base_path.mkdir(exist_ok=True)
 

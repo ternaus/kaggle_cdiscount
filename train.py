@@ -2,32 +2,17 @@
 Experiments with pytorch
 """
 
-
-import torch.optim as optim
-import pandas as pd
-from torch import np  # Torch wrapper for Numpy
-
-import os
-from PIL import Image
-
-import torch
-from torch.utils.data.dataset import Dataset
-from torch.utils.data import DataLoader
-from torchvision import transforms
-from torch import nn
-
-from torch.nn import CrossEntropyLoss
-
-import torch.nn.functional as F
-import utils
-import tqdm
-
-import numpy as np
 import argparse
-from torch.optim import Adam
+
 import data_loader
 import models
-import augmentations
+import numpy as np
+import utils
+from torch import nn
+from torch.nn import CrossEntropyLoss
+from torch.optim import Adam
+from torchvision import transforms
+from pathlib import Path
 
 
 def validation(model, criterion, valid_loader):
@@ -56,7 +41,6 @@ def add_args(parser):
     arg('--lr', type=float, default=0.0001)
     arg('--workers', type=int, default=12)
     arg('--clean', action='store_true')
-    arg('--epoch-size', type=int)
     arg('--device-ids', type=str, help='For example 0,1 to run on two GPUs')
     arg('--model', type=str)
 
@@ -65,33 +49,35 @@ if __name__ == '__main__':
     random_state = 2016
 
     parser = argparse.ArgumentParser()
+
     arg = parser.add_argument
     add_args(parser)
     args = parser.parse_args()
     model_name = args.model
 
+    Path(args.root).mkdir(exist_ok=True, parents=True)
+
     batch_size = args.batch_size
 
     train_transform = transforms.Compose([
-        transforms.RandomSizedCrop(160),
-        # augmentations.D4(),
+        transforms.RandomCrop(160),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
 
     val_transform = transforms.Compose([
         transforms.CenterCrop(160),
-        # augmentations.D4(),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
 
-    train_loader, valid_loader = data_loader.get_loaders(batch_size, args, train_transform=train_transform, val_transform=val_transform)
+    train_loader, valid_loader = data_loader.get_loaders(batch_size, args, train_transform=train_transform,
+                                                         valid_transform=val_transform)
 
     num_classes = 5270
 
-    # model = models.ResNetFinetune(num_classes, net_cls=models.M.resnet50)
-    model = models.DenseNetFinetune(models.densenet121)
+    model = models.ResNetFinetune(num_classes, net_cls=models.M.resnet50)
+    # model = models.DenseNetFinetune(models.densenet121)
     model = utils.cuda(model)
 
     if utils.cuda_is_available:

@@ -4,10 +4,9 @@
 
 from functools import partial
 
-from torch import nn
-import torchvision.models as M
-import torch.functional as F
 import torch.nn.functional
+import torchvision.models as M
+from torch import nn
 
 resnet18 = M.resnet18
 resnet34 = M.resnet34
@@ -79,10 +78,6 @@ class DenseNetFinetune(nn.Module):
         out = out.view(features.size(0), -1)
         out = net.classifier(out)
         return out
-    #
-    #
-    # def forward(self, x):
-    #     return self.net(x)
 
 
 class InceptionV3Finetune(nn.Module):
