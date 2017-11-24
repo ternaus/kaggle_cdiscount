@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import torch.utils.data as data
-
+import torch
 import utils
 
 num_classes = 5270
@@ -29,22 +29,22 @@ def get_loaders(batch_size,
                 args,
                 train_transform=None,
                 valid_transform=None):
-    train_df = pd.read_csv(f'data/train3_df.csv')
+    train_df = pd.read_csv(f'data/train4_df.csv')
 
     train_dataset = CSVDataset(train_df, transform=train_transform)
     train_loader = data.DataLoader(train_dataset,
                                    batch_size=batch_size,
                                    shuffle=True,
                                    num_workers=args.workers,
-                                   pin_memory=True)
+                                   pin_memory=torch.cuda.is_available())
 
-    valid_df = pd.read_csv(f'data/val3_df.csv')
+    valid_df = pd.read_csv(f'data/val4_df.csv')
 
     valid_dataset = CSVDataset(valid_df, transform=valid_transform)
     valid_loader = data.DataLoader(valid_dataset,
                                    batch_size=batch_size,
                                    shuffle=False,
                                    num_workers=args.workers,
-                                   pin_memory=True)
+                                   pin_memory=torch.cuda.is_available())
 
     return train_loader, valid_loader
