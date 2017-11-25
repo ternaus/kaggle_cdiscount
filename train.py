@@ -10,7 +10,7 @@ import numpy as np
 import utils
 from torch import nn
 from torch.nn import CrossEntropyLoss
-from torch.optim import Adam
+from torch.optim import Adam, SGD
 from torchvision import transforms
 from pathlib import Path
 
@@ -102,14 +102,14 @@ if __name__ == '__main__':
 
     if getattr(model, 'finetune', None):
         utils.train(
-            init_optimizer=lambda lr: Adam(model.net.fc.parameters(), lr=lr),
+            init_optimizer=lambda lr: SGD(model.net.fc.parameters(), lr=lr, momentum=0.9),
             n_epochs=1,
             **train_kwargs)
 
         utils.train(
-            init_optimizer=lambda lr: Adam(model.parameters(), lr=lr),
+            init_optimizer=lambda lr: SGD(model.parameters(), lr=lr, momentum=0.9),
             **train_kwargs)
     else:
         utils.train(
-            init_optimizer=lambda lr: Adam(model.parameters(), lr=lr),
+            init_optimizer=lambda lr: SGD(model.parameters(), lr=lr, momentum=0.9),
             **train_kwargs)

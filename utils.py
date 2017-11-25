@@ -1,16 +1,14 @@
 import json
 import random
 import shutil
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from PIL import Image
-
 
 import cv2
 import numpy as np
 import torch
 import tqdm
+from PIL import Image
 from torch import nn
 from torch.autograd import Variable
 from torchvision.transforms import ToTensor, Normalize, Compose
@@ -144,21 +142,3 @@ def load_best_model(model: nn.Module, root: Path) -> None:
     state = torch.load(str(root / 'best-model.pt'))
     model.load_state_dict(state['model'])
     print('Loaded model from epoch {epoch}, step {step:,}'.format(**state))
-
-
-def batches(lst, n):
-    for i in range(0, len(lst), n):
-        yield lst[i: i + n]
-
-
-def imap_fixed_output_buffer(fn, it, threads: int):
-    with ThreadPoolExecutor(max_workers=threads) as executor:
-        futures = []
-        max_futures = threads + 1
-        for x in it:
-            while len(futures) >= max_futures:
-                future, futures = futures[0], futures[1:]
-                yield future.result()
-            futures.append(executor.submit(fn, x))
-        for future in futures:
-            yield future.result()

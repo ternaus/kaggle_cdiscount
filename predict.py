@@ -16,56 +16,48 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from tqdm import tqdm
 
-
-import utils
 import models
+import utils
 
 
-class PredictionDatasetPure:
-    def __init__(self, paths, n_test_aug):
+class PredictionDataset:
+    def __init__(self, paths, aug: int, transform):
         self.paths = paths
-        self.n_test_aug = n_test_aug
+        self.aug = aug
+        self.transform = transform
 
     def __len__(self):
-        return len(self.paths) * self.n_test_aug
+        return len(self.paths)
 
     def __getitem__(self, idx):
         path = self.paths[idx % len(self.paths)]
         image = utils.load_image(path)
-        return transform_pure(image), str(path)
+
+        if self.aug == 0:
+            image = image.crop((0, 0, 160, 160))
+        elif self.aug == 1:
+            image = image.crop((20, 0, 160, 160))
+        elif self.aug == 2:
+            image = image.crop((0, 20, 160, 160))
+        elif self.aug == 3:
+            image = image.crop((20, 20, 160, 160))
+        elif self.aug == 4:
+            image = image.crop((10, 10, 160, 160))
+        else:
+            raise Exception('Wrong augmentation')
+
+        return self.transform(image), str(path)
 
 
-class PredictionDatasetAug:
-    def __init__(self, paths, n_test_aug):
-        self.paths = paths
-        self.n_test_aug = n_test_aug
+def predict(model, paths, batch_size: int, aug=False, transform=None):
+    loader = DataLoader(
+        dataset=PredictionDataset(paths, aug, transform),
+        shuffle=False,
+        batch_size=batch_size,
+        num_workers=args.workers,
+        pin_memory=torch.cuda.is_available()
+    )
 
-    def __len__(self):
-        return len(self.paths) * self.n_test_aug
-
-    def __getitem__(self, idx):
-        path = self.paths[idx % len(self.paths)]
-        image = utils.load_image(path)
-        return transform_aug(image), str(path)
-
-
-def predict(model, paths, batch_size: int, n_test_aug: int, aug=False):
-    if aug:
-        loader = DataLoader(
-            dataset=PredictionDatasetAug(paths, n_test_aug),
-            shuffle=False,
-            batch_size=batch_size,
-            num_workers=args.workers,
-            pin_memory=True
-        )
-    else:
-        loader = DataLoader(
-            dataset=PredictionDatasetPure(paths, n_test_aug),
-            shuffle=False,
-            batch_size=batch_size,
-            num_workers=args.workers,
-            pin_memory=True
-        )
     threshold = 1e-5  # will cut off 99% of the data
 
     model.eval()
@@ -85,11 +77,14 @@ def predict(model, paths, batch_size: int, n_test_aug: int, aug=False):
     return vstack(all_outputs), all_stems
 
 
-def get_model(model_name, num_classes):
+def get_model(model_name, num_classes, device_ids):
+
+    device_ids = list(map(int, device_ids.split(',')))
+
     if 'resnet101' in model_name:
         model = models.ResNetFinetune(num_classes, net_cls=models.M.resnet101)
 
-    model = nn.DataParallel(model, device_ids=[0]).cuda()
+    model = nn.DataParallel(model, device_ids=device_ids).cuda()
 
     if args.model_type == 'best':
         state = torch.load(str(Path('models') / model_name / 'best-model.pt'.format(model_name=model_name)))
@@ -103,12 +98,12 @@ def get_model(model_name, num_classes):
 
 def add_args(parser):
     arg = parser.add_argument
-    arg('--batch-size', type=int, default=256)
+    arg('--batch-size', type=int, default=128)
     arg('--model_type', type=str, default='best', help='what model to use last or best')
-    arg('--workers', type=int, default=12)
+    arg('--workers', type=int, default=8)
     arg('--model', type=str)
     arg('--mode', type=str, default='val', help='can be test or val')
-    arg('--aug', type=str, default='center', help='Type of the augmentation, random or center')
+    arg('--aug', type=int, default='4', help='0, 1, 2, 3, 4')
     arg('--device-ids', type=str, default='0', help='For example 0,1 to run on two GPUs')
 
 
@@ -126,39 +121,41 @@ if __name__ == '__main__':
     data_path = Path('data')
 
     model_name = 'resnet101_18'
-    model = get_model(model_name, num_classes)
+
+    model = get_model(model_name, num_classes, args.device_ids)
 
     model_path = data_path / 'prediction' / model_name
     model_path.mkdir(exist_ok=True, parents=True)
 
     target_size = 160
 
-    transform_aug = transforms.Compose([
-        transforms.RandomCrop(target_size),
+    transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
 
-    transform_pure = transforms.Compose([
-        transforms.CenterCrop(target_size),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
-
-    aug = args.aug != 'center'
+    aug = args.aug
 
     print(aug)
 
     if args.mode == 'val':
-        val_df = pd.read_csv(str(data_path / 'val3_df.csv'))
-        preds, labels = predict(model, val_df['file_name'].apply(Path), batch_size, 1, aug=aug)
-        target_file_name = args.model_type + '_val_' + str(timestamp)
+        val_df = pd.read_csv(str(data_path / 'val4_df.csv'))
+        preds, labels = predict(model, val_df['file_name'].apply(Path).values, batch_size, aug=aug)
+        target_file_name = args.model_type + '_test_' + str(aug)
 
     elif args.mode == 'test':
-        test_path = data_path / 'test'
-        file_names = sorted(list(test_path.glob('*')))
-        preds, labels = predict(model, file_names, batch_size, 1, aug=aug)
-        target_file_name = args.model_type + '_test_' + str(timestamp)
+        test_hashes = pd.read_csv(str(data_path / 'test_hashes.csv'))
+        train_hashes = pd.read_csv(str(data_path / 'train_hashes.csv'))
+        test_hashes = test_hashes.drop_duplicates('md5')
+        test_hashes = test_hashes[~test_hashes['md5'].isin(set(train_hashes['md5'].unique()))]
+        bad_md5 = ['d704b9555801285eedb04213a02fdc41', '35e7e038fe2ec215f63bdb5e4b739524']
+
+        test_hashes = test_hashes[~test_hashes['md5'].isin(set(bad_md5))]
+
+        preds, labels = predict(model, test_hashes['file_name'].apply(Path).values, batch_size, aug=aug,
+                                transform=transform)
+
+        target_file_name = args.model_type + '_test_' + str(aug)
 
     labels = pd.DataFrame(labels, columns=['file_name'])
 
