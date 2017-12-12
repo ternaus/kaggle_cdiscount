@@ -21,6 +21,8 @@ if __name__ == '__main__':
 
     hashes = Parallel(n_jobs=20)(delayed(get_md5)(file_name) for file_name in test_file_names)
 
+    df = pd.DataFrame(hashes, columns=['stra'])
+
     df = pd.DataFrame({'file_name': test_file_names,
                        'md5': hashes})
 

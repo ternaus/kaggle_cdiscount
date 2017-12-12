@@ -18,6 +18,7 @@ from tqdm import tqdm
 
 import models
 import utils
+import json
 
 
 class PredictionDataset:
@@ -86,7 +87,6 @@ def predict(model, paths, batch_size: int, aug=False, transform=None):
 
 
 def get_model(model_name, num_classes, device_ids):
-
     device_ids = list(map(int, device_ids.split(',')))
 
     if 'resnet101' in model_name:
@@ -113,7 +113,7 @@ def add_args(parser):
     arg('--batch-size', type=int, default=128)
     arg('--model_type', type=str, default='best', help='what model to use last or best')
     arg('--workers', type=int, default=8)
-    arg('--model', type=str)
+    arg('--model_name', type=str)
     arg('--mode', type=str, default='val', help='can be test or val')
     arg('--aug', type=int, default='4', help='0, 1, 2, 3, 4, 5, 6, 7, 8')
     arg('--device-ids', type=str, default='0', help='For example 0,1 to run on two GPUs')
@@ -130,13 +130,13 @@ if __name__ == '__main__':
     batch_size = args.batch_size
     num_classes = 5270
 
-    data_path = Path('data')
+    config = json.loads(open(str(Path('__file__').absolute().parent / 'config.json')).read())
 
-    model_name = 'resnet152f_22'
+    data_path = Path(config['data_dir']).expanduser()
 
-    model = get_model(model_name, num_classes, args.device_ids)
+    model = get_model(args.model_name, num_classes, args.device_ids)
 
-    model_path = data_path / 'prediction' / model_name
+    model_path = data_path / 'prediction' / args.model_name
     model_path.mkdir(exist_ok=True, parents=True)
 
     target_size = 160
@@ -161,10 +161,10 @@ if __name__ == '__main__':
         # test_hashes = test_hashes.drop_duplicates('md5')
         # test_hashes = test_hashes[~test_hashes['md5'].isin(set(train_hashes['md5'].unique()))]
         # bad_md5 = ['d704b9555801285eedb04213a02fdc41', '35e7e038fe2ec215f63bdb5e4b739524']
-        # test_hashes = test_hashes[~test_hashes['md5'].isin(set(bad_md5))]
 
-        preds, labels = predict(model, test_hashes['file_name'].apply(Path).values, batch_size, aug=aug,
-                                transform=transform)
+        hashes = test_hashes['file_name'].apply(lambda x: data_path.parent / x, 1).values
+
+        preds, labels = predict(model, hashes, batch_size, aug=aug, transform=transform)
 
         target_file_name = args.model_type + '_test_' + str(aug)
 

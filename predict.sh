@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 
-for i in 0 1 2 3
+export CUDA_DEVICE_ORDER=PCI_BUS_ID
+export CUDA_VISIBLE_DEVICES=1
+
+for i in 4
 
 do
-    python predict.py --mode test --aug $i --device-ids 0 --model_type last --batch-size 128
+    python predict.py --mode test --aug $i --device-ids 0 --model_type last --batch-size 1024 --model_name resnet152f_22
 done
