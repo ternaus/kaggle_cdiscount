@@ -43,6 +43,14 @@ class PredictionDataset:
             image = image.crop((20, 20, 160, 160))
         elif self.aug == 4:
             image = image.crop((10, 10, 160, 160))
+        elif self.aug == 5:
+            image = image.crop((10, 0, 160, 160))
+        elif self.aug == 6:
+            image = image.crop((0, 10, 160, 160))
+        elif self.aug == 7:
+            image = image.crop((20, 10, 160, 160))
+        elif self.aug == 8:
+            image = image.crop((10, 20, 160, 160))
         else:
             raise Exception('Wrong augmentation')
 
@@ -83,6 +91,10 @@ def get_model(model_name, num_classes, device_ids):
 
     if 'resnet101' in model_name:
         model = models.ResNetFinetune(num_classes, net_cls=models.M.resnet101)
+    elif 'resnet50' in model_name:
+        model = models.ResNetFinetune(num_classes, net_cls=models.M.resnet50)
+    elif 'resnet152' in model_name:
+        model = models.ResNetFinetune(num_classes, net_cls=models.M.resnet152)
 
     model = nn.DataParallel(model, device_ids=device_ids).cuda()
 
@@ -103,7 +115,7 @@ def add_args(parser):
     arg('--workers', type=int, default=8)
     arg('--model', type=str)
     arg('--mode', type=str, default='val', help='can be test or val')
-    arg('--aug', type=int, default='4', help='0, 1, 2, 3, 4')
+    arg('--aug', type=int, default='4', help='0, 1, 2, 3, 4, 5, 6, 7, 8')
     arg('--device-ids', type=str, default='0', help='For example 0,1 to run on two GPUs')
 
 
@@ -120,7 +132,7 @@ if __name__ == '__main__':
 
     data_path = Path('data')
 
-    model_name = 'resnet101_18'
+    model_name = 'resnet152f_22'
 
     model = get_model(model_name, num_classes, args.device_ids)
 
@@ -145,12 +157,11 @@ if __name__ == '__main__':
 
     elif args.mode == 'test':
         test_hashes = pd.read_csv(str(data_path / 'test_hashes.csv'))
-        train_hashes = pd.read_csv(str(data_path / 'train_hashes.csv'))
-        test_hashes = test_hashes.drop_duplicates('md5')
-        test_hashes = test_hashes[~test_hashes['md5'].isin(set(train_hashes['md5'].unique()))]
-        bad_md5 = ['d704b9555801285eedb04213a02fdc41', '35e7e038fe2ec215f63bdb5e4b739524']
-
-        test_hashes = test_hashes[~test_hashes['md5'].isin(set(bad_md5))]
+        # train_hashes = pd.read_csv(str(data_path / 'train_hashes.csv'))
+        # test_hashes = test_hashes.drop_duplicates('md5')
+        # test_hashes = test_hashes[~test_hashes['md5'].isin(set(train_hashes['md5'].unique()))]
+        # bad_md5 = ['d704b9555801285eedb04213a02fdc41', '35e7e038fe2ec215f63bdb5e4b739524']
+        # test_hashes = test_hashes[~test_hashes['md5'].isin(set(bad_md5))]
 
         preds, labels = predict(model, test_hashes['file_name'].apply(Path).values, batch_size, aug=aug,
                                 transform=transform)

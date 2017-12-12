@@ -13,7 +13,7 @@ def get_md5(file_name):
 
 
 if __name__ == '__main__':
-    train_path = Path('../data') / 'train'
+    train_path = Path('data') / 'train'
 
     train_file_names = list(train_path.glob('**/*.jpg'))
 
@@ -22,4 +22,4 @@ if __name__ == '__main__':
     df = pd.DataFrame({'file_name': train_file_names,
                        'md5': hashes})
 
-    df.to_csv('../data/train_hashes.csv', index=False)
+    df.to_csv('data/train_hashes.csv', index=False)
