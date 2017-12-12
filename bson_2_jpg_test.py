@@ -22,12 +22,12 @@ def process(q, iolock):
                 f.write(pic['picture'])
 
 
-data_path = Path('../data')
+data_path = Path('data')
 base_path = data_path / 'test'
 base_path.mkdir(exist_ok=True)
 
 
-n_cores = 8
+n_cores = 12
 prods = mp.Manager().dict()
 
 q = mp.Queue(maxsize=n_cores)
