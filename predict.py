@@ -157,10 +157,10 @@ if __name__ == '__main__':
 
     elif args.mode == 'test':
         test_hashes = pd.read_csv(str(data_path / 'test_hashes.csv'))
-        # train_hashes = pd.read_csv(str(data_path / 'train_hashes.csv'))
-        # test_hashes = test_hashes.drop_duplicates('md5')
-        # test_hashes = test_hashes[~test_hashes['md5'].isin(set(train_hashes['md5'].unique()))]
-        # bad_md5 = ['d704b9555801285eedb04213a02fdc41', '35e7e038fe2ec215f63bdb5e4b739524']
+        train_hashes = pd.read_csv(str(data_path / 'train_hashes.csv'))
+        test_hashes = test_hashes.drop_duplicates('md5')
+        test_hashes = test_hashes[~test_hashes['md5'].isin(set(train_hashes['md5'].unique()))]
+        bad_md5 = ['d704b9555801285eedb04213a02fdc41', '35e7e038fe2ec215f63bdb5e4b739524']
 
         hashes = test_hashes['file_name'].apply(lambda x: data_path.parent / x, 1).values
 
