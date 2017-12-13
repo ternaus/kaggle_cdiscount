@@ -5,94 +5,132 @@ import scipy.sparse
 from joblib import Parallel, delayed
 from tqdm import tqdm
 from scipy.stats.mstats import gmean
+
 tqdm.pandas(desc="my bar!")
 
 import pandas as pd
 
 from pathlib import Path
 from scipy.sparse import csr_matrix, save_npz, vstack
-
-num_classes = 5270
-
-
-average_type = 'gmean'
-
-# model_name = 'resnet50f_48'
-# model_name = 'resnet101f_34'
-# model_name = 'resnet152f_22'
-model_name = 'resnet101_23'
-
-config = json.loads(open(str(Path('__file__').absolute().parent / 'config.json')).read())
-
-data_path = Path(config['data_dir']).expanduser()
-
-model_path = data_path / 'prediction' / model_name
-
-test_hashes = pd.read_csv(str(data_path / 'test_hashes.csv'))
-
-test_hashes['file_name'] = test_hashes['file_name'].str.split('/').str.get(-1)
-print('test_hashes.shape = ', test_hashes.shape)
-
-file_to_md5 = dict(zip(test_hashes['file_name'].values, test_hashes['md5'].values))
-
-preds = sorted(list(model_path.glob('last_test_[0,1,2,3,5,6,7,8].npz')))
-# preds = sorted(list(model_path.glob('last_test_[0,1,2,3,4,5,6,7,8].npz')))
+import argparse
 
 
-print('[{}] Loading predictions...'.format(str(datetime.datetime.now())))
+def get_hashes(filtered_hashes=False):
+    test_hashes = pd.read_csv(str(data_path / 'test_hashes.csv'))
 
-ms = [scipy.sparse.load_npz(str(x)) for x in preds]
+    test_hashes['file_name'] = test_hashes['file_name'].str.split('/').str.get(-1)
 
-print('[{}] Loading test file_names...'.format(str(datetime.datetime.now())))
-
-file_names = pd.read_csv(str(model_path / 'last_test_0.csv'))
-
-# train_df = pd.read_csv('data/train1_df.csv')
-
-# map_dict = dict(zip(train_df['class_id'].values, train_df['category_id'].values))
-
-file_names['file_name'] = file_names['file_name'].str.split('/').str.get(-1)
-
-print('[{}] Preparing md5 => prob...'.format(str(datetime.datetime.now())))
+    if not filtered_hashes:
+        return test_hashes
+    else:
+        train_hashes = pd.read_csv(str(data_path / 'train_hashes.csv'))
+        test_hashes = test_hashes.drop_duplicates('md5')
+        test_hashes = test_hashes[~test_hashes['md5'].isin(set(train_hashes['md5'].unique()))]
+    return test_hashes
 
 
-def get_probs(i, average_type='gmean'):
-    image_name = file_names.loc[i, 'file_name']
-    temp = []
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    arg = parser.add_argument
+    arg = parser.add_argument
 
-    for j, m in enumerate(ms):
-        temp += [m[i]]
+    arg('--model_type', type=str, default='last', help='what model to use last or best')
+    arg('--workers', type=int, default=12)
+    arg('--model_name', type=str)
+    arg('--average_type', type=str, default='gmean')
+    args = parser.parse_args()
 
-    if average_type == 'mean':
-        temp = scipy.sparse.vstack(temp).mean(axis=0)
-    elif average_type == 'gmean':
-        temp = gmean(scipy.sparse.vstack(temp).todense() + 1e-15, axis=0)
+    print('[{}] Setting up paths...'.format(str(datetime.datetime.now())))
 
-    temp[temp < 1e-6] = 0
+    config = json.loads(open(str(Path('__file__').absolute().parent / 'config.json')).read())
+    data_path = Path(config['data_dir']).expanduser()
+    model_path = data_path / 'prediction' / args.model_name
 
-    return file_to_md5[image_name], csr_matrix(temp)
+    print('[{}] Getting hashes...'.format(str(datetime.datetime.now())))
+
+    hashes = get_hashes()
+
+    file2md5 = dict(zip(hashes['file_name'].values, hashes['md5'].values))
+
+    tta_file_names = list(model_path.glob('*.csv'))
+
+    print('Averaging {num_tta} for {model_name}'.format(num_tta=len(tta_file_names), model_name=args.model_name))
+
+    md5_2_ind_dicts = []
+
+    common_md5s = None
+
+    for file_name in tqdm(tta_file_names):
+        df = pd.read_csv(str(file_name))
+
+        df['file_name'] = df['file_name'].str.split('/').str.get(-1)
+
+        df['md5'] = df['file_name'].map(file2md5)
+
+        md5_2_ind = dict(zip(df['md5'].values, range(df.shape[0])))
+
+        md5_2_ind_dicts += [md5_2_ind]
+
+        if not common_md5s:
+            common_md5s = set(md5_2_ind.keys())
+        else:
+            common_md5s = common_md5s.intersection(set(md5_2_ind.keys()))
+
+    print('number of common md5s =  {num_file_names}'.format(num_file_names=len(common_md5s)))
+
+    print('[{}] Reading  important hashes...'.format(str(datetime.datetime.now())))
+
+    important_hashes = get_hashes(filtered_hashes=True)
+    common_md5s = sorted(list(common_md5s.intersection(set(important_hashes['md5'].values))))
+
+    print('[{}] creating merged dict...'.format(str(datetime.datetime.now())))
+    print('number of common md5s =  {num_file_names}'.format(num_file_names=len(common_md5s)))
+
+    md5_2_ind_joined = {}
+
+    for md5 in tqdm(common_md5s):
+        temp = []
+        for md5_2_ind in md5_2_ind_dicts:
+            temp += [md5_2_ind[md5]]
+
+        md5_2_ind_joined[md5] = temp
 
 
-result = Parallel(n_jobs=12)(delayed(get_probs)(i) for i in file_names.index)
+    def get_probs(md5, average_type='gmean'):
+        temp = []
 
-print(file_names.shape[0], ms[0].shape[0])
+        for position, row in enumerate(md5_2_ind_joined[md5]):
+            temp += [ms[position][row]]
 
-assert file_names.shape[0] == ms[0].shape[0]
+        if average_type == 'mean':
+            temp = scipy.sparse.vstack(temp).mean(axis=0)
+        elif average_type == 'gmean':
+            temp = gmean(scipy.sparse.vstack(temp).todense() + 1e-15, axis=0)
 
-# result = [get_probs(i) for i in tqdm(file_names.index)]
+        temp[temp < 1e-6] = 0
 
-print('[{}] Unzippping...'.format(str(datetime.datetime.now())))
+        return md5, csr_matrix(temp)
 
-pred_md5_list, probs = zip(*result)
 
-probs = vstack(probs)
+    print('[{}] Loading predictions...'.format(str(datetime.datetime.now())))
+    ms = [scipy.sparse.load_npz(str(x).replace('csv', 'npz')) for x in tqdm(tta_file_names)]
 
-labels = pd.DataFrame({'md5': pred_md5_list})
+    result = Parallel(n_jobs=12)(delayed(get_probs)(md5) for md5 in common_md5s)
 
-print('[{}] Saving labels...'.format(str(datetime.datetime.now())))
+    # result = [get_probs(i) for i in tqdm(file_names.index)]
 
-labels.to_csv(str(model_path / (average_type + '_last_md5_list.csv')), index=False)
+    print('[{}] Unzippping...'.format(str(datetime.datetime.now())))
 
-print('[{}] Saving predictions...'.format(str(datetime.datetime.now())))
+    pred_md5_list, probs = zip(*result)
 
-save_npz(str(model_path / (average_type + '_last_probs.npz')), probs)
+    probs = vstack(probs)
+
+    labels = pd.DataFrame({'md5': pred_md5_list})
+
+    print('[{}] Saving labels...'.format(str(datetime.datetime.now())))
+
+    labels.to_csv(str(model_path / (args.average_type + '_last_md5_list.csv')), index=False)
+
+    print('[{}] Saving predictions...'.format(str(datetime.datetime.now())))
+
+    save_npz(str(model_path / (args.average_type + '_last_probs.npz')), probs)
