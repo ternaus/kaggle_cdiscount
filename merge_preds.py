@@ -13,6 +13,7 @@ import pandas as pd
 from pathlib import Path
 from scipy.sparse import csr_matrix, save_npz, vstack
 import argparse
+import gc
 
 
 def get_hashes(filtered_hashes=False):
@@ -36,7 +37,11 @@ if __name__ == '__main__':
 
     arg('--model_type', type=str, default='last', help='what model to use last or best')
     arg('--workers', type=int, default=12)
-    arg('--model_name', type=str)
+    arg('--model_name', type=str, help='can be '
+                                       'last '
+                                       'mean '
+                                       'all ')
+
     arg('--average_type', type=str, default='gmean')
     args = parser.parse_args()
 
@@ -52,7 +57,10 @@ if __name__ == '__main__':
 
     file2md5 = dict(zip(hashes['file_name'].values, hashes['md5'].values))
 
-    tta_file_names = list(model_path.glob('*.csv'))
+    if args.model_type != 'all':
+        tta_file_names = list(model_path.glob('{model_type}*.csv'.format(model_type=args.model_type)))
+    else:
+        tta_file_names = list(model_path.glob('*.csv'))
 
     print('Averaging {num_tta} for {model_name}'.format(num_tta=len(tta_file_names), model_name=args.model_name))
 
@@ -111,6 +119,7 @@ if __name__ == '__main__':
 
         return md5, csr_matrix(temp)
 
+    gc.collect()
 
     print('[{}] Loading predictions...'.format(str(datetime.datetime.now())))
     ms = [scipy.sparse.load_npz(str(x).replace('csv', 'npz')) for x in tqdm(tta_file_names)]
@@ -129,8 +138,8 @@ if __name__ == '__main__':
 
     print('[{}] Saving labels...'.format(str(datetime.datetime.now())))
 
-    labels.to_csv(str(model_path / (args.average_type + '_last_md5_list.csv')), index=False)
+    labels.to_csv(str(model_path / (args.average_type + '_{model_type}_md5_list.csv'.format(model_type=args.model_type))), index=False)
 
     print('[{}] Saving predictions...'.format(str(datetime.datetime.now())))
 
-    save_npz(str(model_path / (args.average_type + '_last_probs.npz')), probs)
+    save_npz(str(model_path / (args.average_type + '_{model_type}_probs.npz'.format(model_type=args.model_type))), probs)
